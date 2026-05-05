@@ -74,7 +74,7 @@ lr_model.fit(X_train_vec, y_train)
 y_pred_lr = lr_model.predict(X_test_vec)
 
 # Custom threshold — lower value = more aggressive spam catching
-CUSTOM_THRESHOLD = 0.3
+CUSTOM_THRESHOLD = 0.4
 y_prob_lr = lr_model.predict_proba(X_test_vec)[:, 1]
 y_pred_lr_custom = ["spam" if p >= CUSTOM_THRESHOLD else "ham" for p in y_prob_lr]
 
@@ -92,6 +92,73 @@ for name, preds in [("Naive Bayes", y_pred_nb),
     print("\nClassification Report:\n", classification_report(y_test, preds))
     print("Confusion Matrix:\n", confusion_matrix(y_test, preds))
 
+# ─────────────────────────────────────────────
+# ABLATION
+# ─────────────────────────────────────────────
+
+# ── ABLATION 1: N-gram Range ──────────────────────────────────────────────────
+print("\n===== ABLATION: N-gram Range =====")
+
+ngram_configs = [(1,1), (1,2), (1,3)]
+
+for ngram in ngram_configs:
+    vec = TfidfVectorizer(stop_words="english", ngram_range=ngram, max_df=0.95, min_df=2)
+    X_tr = vec.fit_transform(X_train)
+    X_te = vec.transform(X_test)
+
+    model = LogisticRegression(max_iter=1000)
+    model.fit(X_tr, y_train)
+    preds = model.predict(X_te)
+
+    print(f"\nngram_range={ngram}")
+    print(f"  Recall  : {recall_score(y_test, preds, pos_label='spam'):.3f}")
+    print(f"  F1      : {f1_score(y_test, preds, pos_label='spam'):.3f}")
+    print(f"  Accuracy: {accuracy_score(y_test, preds):.3f}")
+
+# ── ABLATION 2: Decision Threshold ───────────────────────────────────────────
+print("\n===== ABLATION: LR Decision Threshold =====")
+
+# Use your best vectorizer from ablation 1
+best_vec = TfidfVectorizer(stop_words="english", ngram_range=(1,2), max_df=0.95, min_df=2)
+X_tr = best_vec.fit_transform(X_train)
+X_te = best_vec.transform(X_test)
+
+lr = LogisticRegression(max_iter=1000)
+lr.fit(X_tr, y_train)
+probs = lr.predict_proba(X_te)[:, 1]   # P(spam)
+
+thresholds = [0.5, 0.4, 0.3, 0.2]
+
+for t in thresholds:
+    preds = ["spam" if p >= t else "ham" for p in probs]
+    print(f"\nThreshold={t}")
+    print(f"  Recall   : {recall_score(y_test, preds, pos_label='spam'):.3f}")
+    print(f"  Precision: {precision_score(y_test, preds, pos_label='spam'):.3f}")
+    print(f"  F1       : {f1_score(y_test, preds, pos_label='spam'):.3f}")
+
+# ── ABLATION 3: TF-IDF Filtering (max_df / min_df) ───────────────────────────
+print("\n===== ABLATION: TF-IDF Filtering =====")
+
+filter_configs = [
+    {"max_df": 1.0, "min_df": 1},   # no filtering
+    {"max_df": 0.95, "min_df": 2},  # moderate (your current setting)
+    {"max_df": 0.95, "min_df": 5},  # strict
+]
+
+for cfg in filter_configs:
+    vec = TfidfVectorizer(stop_words="english", ngram_range=(1,2),
+                          max_df=cfg["max_df"], min_df=cfg["min_df"])
+    X_tr = vec.fit_transform(X_train)
+    X_te = vec.transform(X_test)
+
+    model = LogisticRegression(max_iter=1000)
+    model.fit(X_tr, y_train)
+    preds = model.predict(X_te)
+
+    print(f"\nmax_df={cfg['max_df']}, min_df={cfg['min_df']}")
+    print(f"  Recall  : {recall_score(y_test, preds, pos_label='spam'):.3f}")
+    print(f"  F1      : {f1_score(y_test, preds, pos_label='spam'):.3f}")
+    print(f"  Accuracy: {accuracy_score(y_test, preds):.3f}")
 
 # ─────────────────────────────────────────────
 # 8. MODEL COMPARISON TABLE
